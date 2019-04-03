@@ -46,6 +46,8 @@ class AP4_StreamCipher;
 class AP4_SaizAtom;
 class AP4_SaioAtom;
 class AP4_CencSampleInfoTable;
+class AP4_AvcFrameParser;
+class AP4_HevcFrameParser;
 
 /*----------------------------------------------------------------------
 |   constants
@@ -486,13 +488,22 @@ class AP4_CencCbcsSubSampleMapper : public AP4_CencSubSampleMapper
 {
 public:
     // constructor and destructor
-    AP4_CencCbcsSubSampleMapper(AP4_Size nalu_length_size, AP4_UI32 format) :
-        AP4_CencSubSampleMapper(nalu_length_size, format) {}
+    AP4_CencCbcsSubSampleMapper(AP4_Size nalu_length_size, AP4_UI32 format, AP4_TrakAtom* trak);
+    ~AP4_CencCbcsSubSampleMapper();
     
     // methods
     virtual AP4_Result GetSubSampleMap(AP4_DataBuffer&      sample_data,
                                        AP4_Array<AP4_UI16>& bytes_of_cleartext_data, 
                                        AP4_Array<AP4_UI32>& bytes_of_encrypted_data);
+    
+private:
+    // members
+    AP4_AvcFrameParser*  m_AvcParser;
+    AP4_HevcFrameParser* m_HevcParser;
+    
+    // methods
+    AP4_Result ParseAvcData(const AP4_UI08* data, AP4_Size data_size);
+    AP4_Result ParseHevcData(const AP4_UI08* data, AP4_Size data_size);
 };
 
 /*----------------------------------------------------------------------
@@ -581,6 +592,13 @@ public:
 class AP4_CencEncryptingProcessor : public AP4_Processor
 {
 public:
+    // class constants
+    static const AP4_UI32 OPTION_EME_PSSH           = 0x01; ///< Include a 'standard EME' pssh atom in the output
+    static const AP4_UI32 OPTION_PIFF_COMPATIBILITY = 0x02; ///< Attempt to create an output that is compatible with the PIFF format
+    static const AP4_UI32 OPTION_PIFF_IV_SIZE_16    = 0x04; ///< With the PIFF-compatibiity option, use an IV of size 16 when possible (instead of 8)
+    static const AP4_UI32 OPTION_IV_SIZE_8          = 0x08; ///< Use an IV of size 8 when possible (instead of 16 by default).
+    static const AP4_UI32 OPTION_NO_SENC            = 0x10; ///< Don't output an 'senc' atom
+
     // types
     struct Encrypter {
         Encrypter(AP4_UI32 track_id, AP4_UI32 cleartext_fragments, AP4_CencSampleEncrypter* sample_encrypter) :
@@ -597,6 +615,7 @@ public:
 
     // constructor
     AP4_CencEncryptingProcessor(AP4_CencVariant         variant,
+                                AP4_UI32                options = 0,
                                 AP4_BlockCipherFactory* block_cipher_factory = NULL);
     ~AP4_CencEncryptingProcessor();
 
@@ -619,6 +638,7 @@ public:
 protected:    
     // members
     AP4_CencVariant          m_Variant;
+    AP4_UI32                 m_Options;
     AP4_BlockCipherFactory*  m_BlockCipherFactory;
     AP4_ProtectionKeyMap     m_KeyMap;
     AP4_TrackPropertyMap     m_PropertyMap;

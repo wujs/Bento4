@@ -13,8 +13,6 @@
 import sys
 import os
 import shutil
-import glob
-import datetime
 import fnmatch
 import zipfile
 import re
@@ -237,6 +235,7 @@ bin_files = [
     (bin_in,'aac2mp4','bin'),
     (bin_in,'mp42ts','bin'),
     (bin_in,'mp42hls','bin'),
+    (bin_in,'mp4iframeindex','bin'),
     (bin_in,'*.a','lib'),
     (bin_in,'*.dll','bin'),
     (bin_in,'*.dylib','bin'),

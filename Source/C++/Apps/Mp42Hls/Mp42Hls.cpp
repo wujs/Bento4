@@ -2,7 +2,7 @@
 |
 |    AP4 - MP4 to HLS File Converter
 |
-|    Copyright 2002-2015 Axiomatic Systems, LLC
+|    Copyright 2002-2018 Axiomatic Systems, LLC
 |
 |
 |    This file is part of Bento4/AP4 (MP4 Atom Processing Library).
@@ -39,9 +39,9 @@
 /*----------------------------------------------------------------------
 |   constants
 +---------------------------------------------------------------------*/
-#define BANNER "MP4 To HLS File Converter - Version 1.1\n"\
+#define BANNER "MP4 To HLS File Converter - Version 1.2\n"\
                "(Bento4 Version " AP4_VERSION_STRING ")\n"\
-               "(c) 2002-2015 Axiomatic Systems, LLC"
+               "(c) 2002-2018 Axiomatic Systems, LLC"
  
 /*----------------------------------------------------------------------
 |   options
@@ -91,6 +91,7 @@ static struct _Options {
     const char*           encryption_key_format;
     const char*           encryption_key_format_versions;
     AP4_Array<AP4_String> encryption_key_lines;
+    AP4_UI64              pcr_offset;
 } Options;
 
 static struct _Stats {
@@ -143,6 +144,7 @@ PrintUsageAndExit()
             "    Target segment duration in seconds (default: 6)\n"
             "  --segment-duration-threshold <t>\n"
             "    Segment duration threshold in milliseconds (default: 15)\n"
+            "  --pcr-offset <offset> in units of 90kHz (default 10000)\n"
             "  --index-filename <filename>\n"
             "    Filename to use for the playlist/index (default: stream.m3u8)\n"
             "  --segment-filename-template <pattern>\n"
@@ -173,7 +175,7 @@ PrintUsageAndExit()
             "  --encryption-key-format <format>\n"
             "    Encryption key format. (default: 'identity')\n"
             "  --encryption-key-format-versions <versions>\n"
-            "    Encryption key format versions."
+            "    Encryption key format versions.\n"
             "  --encryption-key-line <ext-x-key-line>\n"
             "    Preformatted encryption key line (only the portion after the #EXT-X-KEY: tag).\n"
             "    This option can be used multiple times, once for each preformatted key line to be included in the playlist.\n"
@@ -560,7 +562,7 @@ SampleEncrypter::EncryptVideoSample(AP4_DataBuffer& sample, AP4_UI08 nalu_length
             PreventStartCodeEmulation(nalu+nalu_length_size, nalu_length, escaped_nalu);
             
             // the size may have changed
-            // FIXME: this could overflow if nalu_length_size is too small
+            // TODO: this could overflow if nalu_length_size is too small
             switch (nalu_length_size) {
                 case 1:
                     nalu[0] = (AP4_UI08)(escaped_nalu.GetDataSize()&0xFF);
@@ -932,19 +934,19 @@ PackedAudioWriter::WriteSample(AP4_Sample&            sample,
         return AP4_ERROR_INVALID_FORMAT;
     }
     if (sample_description->GetFormat() == AP4_SAMPLE_FORMAT_MP4A) {
-        AP4_MpegAudioSampleDescription* audio_desc = AP4_DYNAMIC_CAST(AP4_MpegAudioSampleDescription, sample_description);
+        AP4_MpegAudioSampleDescription* mpeg_audio_desc = AP4_DYNAMIC_CAST(AP4_MpegAudioSampleDescription, sample_description);
 
-        if (audio_desc == NULL) return AP4_ERROR_NOT_SUPPORTED;
-        if (audio_desc->GetMpeg4AudioObjectType() != AP4_MPEG4_AUDIO_OBJECT_TYPE_AAC_LC   &&
-            audio_desc->GetMpeg4AudioObjectType() != AP4_MPEG4_AUDIO_OBJECT_TYPE_AAC_MAIN &&
-            audio_desc->GetMpeg4AudioObjectType() != AP4_MPEG4_AUDIO_OBJECT_TYPE_SBR      &&
-            audio_desc->GetMpeg4AudioObjectType() != AP4_MPEG4_AUDIO_OBJECT_TYPE_PS) {
+        if (mpeg_audio_desc == NULL) return AP4_ERROR_NOT_SUPPORTED;
+        if (mpeg_audio_desc->GetMpeg4AudioObjectType() != AP4_MPEG4_AUDIO_OBJECT_TYPE_AAC_LC   &&
+            mpeg_audio_desc->GetMpeg4AudioObjectType() != AP4_MPEG4_AUDIO_OBJECT_TYPE_AAC_MAIN &&
+            mpeg_audio_desc->GetMpeg4AudioObjectType() != AP4_MPEG4_AUDIO_OBJECT_TYPE_SBR      &&
+            mpeg_audio_desc->GetMpeg4AudioObjectType() != AP4_MPEG4_AUDIO_OBJECT_TYPE_PS) {
             return AP4_ERROR_NOT_SUPPORTED;
         }
 
-        unsigned int sample_rate   = audio_desc->GetSampleRate();
-        unsigned int channel_count = audio_desc->GetChannelCount();
-        const AP4_DataBuffer& dsi  = audio_desc->GetDecoderInfo();
+        unsigned int sample_rate   = mpeg_audio_desc->GetSampleRate();
+        unsigned int channel_count = mpeg_audio_desc->GetChannelCount();
+        const AP4_DataBuffer& dsi  = mpeg_audio_desc->GetDecoderInfo();
         if (dsi.GetDataSize()) {
             AP4_Mp4AudioDecoderConfig dec_config;
             AP4_Result result = dec_config.Parse(dsi.GetData(), dsi.GetDataSize());
@@ -1176,7 +1178,7 @@ WriteSamples(AP4_Mpeg2TsWriter*               ts_writer,
                 if (Options.encryption_mode == ENCRYPTION_MODE_SAMPLE_AES) {
                     AP4_DataBuffer descriptor;
                     if (audio_track) {
-                        AP4_Result result = MakeSampleAesAudioDescriptor(descriptor, audio_track->GetSampleDescription(0), audio_sample_data);
+                        result = MakeSampleAesAudioDescriptor(descriptor, audio_track->GetSampleDescription(0), audio_sample_data);
                         if (AP4_SUCCEEDED(result) && descriptor.GetDataSize()) {
                             audio_stream->SetDescriptor(descriptor.GetData(), descriptor.GetDataSize());
                         } else {
@@ -1185,7 +1187,7 @@ WriteSamples(AP4_Mpeg2TsWriter*               ts_writer,
                         }
                     }
                     if (video_track) {
-                        AP4_Result result = MakeSampleAesVideoDescriptor(descriptor);
+                        result = MakeSampleAesVideoDescriptor(descriptor);
                         if (AP4_SUCCEEDED(result) && descriptor.GetDataSize()) {
                             video_stream->SetDescriptor(descriptor.GetData(), descriptor.GetDataSize());
                         } else {
@@ -1508,11 +1510,6 @@ WriteSamples(AP4_Mpeg2TsWriter*               ts_writer,
     }
     
     if (Options.verbose) {
-        if (video_track) {
-            segment_duration = video_ts - last_ts;
-        } else {
-            segment_duration = audio_ts - last_ts;
-        }
         printf("Conversion complete, total duration=%.2f secs\n", total_duration);
     }
     
@@ -1556,6 +1553,7 @@ main(int argc, char** argv)
     Options.encryption_key_uri             = "key.bin";
     Options.encryption_key_format          = NULL;
     Options.encryption_key_format_versions = NULL;
+    Options.pcr_offset                     = AP4_MPEG2_TS_DEFAULT_PCR_OFFSET;
     AP4_SetMemory(Options.encryption_key, 0, sizeof(Options.encryption_key));
     AP4_SetMemory(Options.encryption_iv,  0, sizeof(Options.encryption_iv));
     AP4_SetMemory(&Stats, 0, sizeof(Stats));
@@ -1644,6 +1642,12 @@ main(int argc, char** argv)
                 return 1;
             }
             Options.video_track_id = (unsigned int)strtoul(*args++, NULL, 10);
+        } else if (!strcmp(arg, "--pcr-offset")) {
+            if (*args == NULL) {
+                fprintf(stderr, "ERROR: --pcr-offset requires a number\n");
+                return 1;
+            }
+            Options.pcr_offset = (unsigned int)strtoul(*args++, NULL, 10);
         } else if (!strcmp(arg, "--output-single-file")) {
             Options.output_single_file = true;
         } else if (!strcmp(arg, "--index-filename")) {
@@ -2019,8 +2023,8 @@ main(int argc, char** argv)
                                                stream_id,
                                                audio_stream,
                                                Options.audio_pid,
-                                               NULL,
-                                               0);
+                                               NULL, 0,
+                                               Options.pcr_offset);
             if (AP4_FAILED(result)) {
                 fprintf(stderr, "could not create audio stream (%d)\n", result);
                 goto end;
@@ -2041,7 +2045,9 @@ main(int argc, char** argv)
             if (sample_description->GetFormat() == AP4_SAMPLE_FORMAT_AVC1 ||
                 sample_description->GetFormat() == AP4_SAMPLE_FORMAT_AVC2 ||
                 sample_description->GetFormat() == AP4_SAMPLE_FORMAT_AVC3 ||
-                sample_description->GetFormat() == AP4_SAMPLE_FORMAT_AVC4) {
+                sample_description->GetFormat() == AP4_SAMPLE_FORMAT_AVC4 ||
+                sample_description->GetFormat() == AP4_SAMPLE_FORMAT_DVAV ||
+                sample_description->GetFormat() == AP4_SAMPLE_FORMAT_DVA1) {
                 if (Options.encryption_mode == ENCRYPTION_MODE_SAMPLE_AES) {
                     stream_type = AP4_MPEG2_STREAM_TYPE_SAMPLE_AES_AVC;
                     AP4_AvcSampleDescription* avc_desc = AP4_DYNAMIC_CAST(AP4_AvcSampleDescription, sample_description);
@@ -2054,7 +2060,9 @@ main(int argc, char** argv)
                     stream_type = AP4_MPEG2_STREAM_TYPE_AVC;
                 }
             } else if (sample_description->GetFormat() == AP4_SAMPLE_FORMAT_HEV1 ||
-                       sample_description->GetFormat() == AP4_SAMPLE_FORMAT_HVC1) {
+                       sample_description->GetFormat() == AP4_SAMPLE_FORMAT_HVC1 ||
+                       sample_description->GetFormat() == AP4_SAMPLE_FORMAT_DVHE ||
+                       sample_description->GetFormat() == AP4_SAMPLE_FORMAT_DVH1) {
                 stream_type = AP4_MPEG2_STREAM_TYPE_HEVC;
             } else {
                 fprintf(stderr, "ERROR: video codec not supported\n");
@@ -2073,8 +2081,8 @@ main(int argc, char** argv)
                                                stream_id,
                                                video_stream,
                                                Options.video_pid,
-                                               NULL,
-                                               0);
+                                               NULL, 0,
+                                               Options.pcr_offset);
             if (AP4_FAILED(result)) {
                 fprintf(stderr, "could not create video stream (%d)\n", result);
                 goto end;

@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -19,12 +19,10 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v140</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v140</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -92,6 +90,7 @@
     <ClCompile Include="..\..\..\..\Source\C++\Core\Ap4AinfAtom.cpp" />
     <ClCompile Include="..\..\..\..\Source\C++\Core\Ap4BlocAtom.cpp" />
     <ClCompile Include="..\..\..\..\Source\C++\Core\Ap4CommonEncryption.cpp" />
+    <ClCompile Include="..\..\..\..\Source\C++\Core\Ap4Dac4Atom.cpp" />
     <ClCompile Include="..\..\..\..\Source\C++\Core\Ap4Dec3Atom.cpp" />
     <ClCompile Include="..\..\..\..\Source\C++\Core\Ap4DvccAtom.cpp" />
     <ClCompile Include="..\..\..\..\Source\C++\Core\Ap4HvccAtom.cpp" />
@@ -219,6 +218,7 @@
     <ClInclude Include="..\..\..\..\Source\C++\Core\Ap4AinfAtom.h" />
     <ClInclude Include="..\..\..\..\Source\C++\Core\Ap4BlocAtom.h" />
     <ClInclude Include="..\..\..\..\Source\C++\Core\Ap4CommonEncryption.h" />
+    <ClInclude Include="..\..\..\..\Source\C++\Core\Ap4Dac4Atom.h" />
     <ClInclude Include="..\..\..\..\Source\C++\Core\Ap4Dec3Atom.h" />
     <ClInclude Include="..\..\..\..\Source\C++\Core\Ap4DvccAtom.h" />
     <ClInclude Include="..\..\..\..\Source\C++\Core\Ap4PsshAtom.h" />
